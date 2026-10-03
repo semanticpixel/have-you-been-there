@@ -8,9 +8,13 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:db": "./scripts/test-db.sh",
+    "db:start": "supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta",
+    "db:stop": "supabase stop"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "@vis.gl/react-google-maps": "^1.10.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -21,6 +25,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "supabase": "^2.119.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"

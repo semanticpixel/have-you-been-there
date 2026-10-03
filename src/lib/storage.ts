@@ -1,18 +1,28 @@
 import type { Bartender } from './types';
 
+export interface StoreStatus {
+  loading: boolean;
+  error?: string;
+}
+
 /**
- * Storage backend. The app only talks to this interface, so swapping localStorage for a shared
- * backend (Supabase/Firebase) later — so the whole crew sees the same list — is a contained change.
+ * Storage backend. The app only talks to this interface: `createLocalStore` keeps data on this
+ * device, `createSupabaseStore` shares it with the crew.
  */
 export interface BartenderStore {
   getAll(): Bartender[];
+  getStatus(): StoreStatus;
   save(bartender: Bartender): void;
   remove(id: string): void;
-  replaceAll(bartenders: Bartender[]): void;
+  /** Merge in bartenders from an export or another store; returns how many were added or updated. */
+  importMany(bartenders: Bartender[]): number;
+  refresh(): void;
   subscribe(listener: () => void): () => void;
+  dispose?(): void;
 }
 
 const STORAGE_KEY = 'hybt:bartenders:v1';
+const READY: StoreStatus = { loading: false };
 
 export function createLocalStore(storage: Storage = window.localStorage): BartenderStore {
   const listeners = new Set<() => void>();
@@ -45,6 +55,7 @@ export function createLocalStore(storage: Storage = window.localStorage): Barten
 
   return {
     getAll: () => cache,
+    getStatus: () => READY,
     save(bartender) {
       const stamped = { ...bartender, updatedAt: new Date().toISOString() };
       const exists = cache.some((b) => b.id === bartender.id);
@@ -53,9 +64,12 @@ export function createLocalStore(storage: Storage = window.localStorage): Barten
     remove(id) {
       commit(cache.filter((b) => b.id !== id));
     },
-    replaceAll(bartenders) {
-      commit(bartenders);
+    importMany(bartenders) {
+      const changed = newerThanCurrent(cache, bartenders);
+      if (changed.length > 0) commit(mergeBartenders(cache, changed));
+      return changed.length;
     },
+    refresh() {},
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -63,13 +77,19 @@ export function createLocalStore(storage: Storage = window.localStorage): Barten
   };
 }
 
+/** The incoming bartenders that are new, or newer than the version we already have. */
+export function newerThanCurrent(current: Bartender[], incoming: Bartender[]): Bartender[] {
+  const byId = new Map(current.map((b) => [b.id, b]));
+  return incoming.filter((b) => {
+    const existing = byId.get(b.id);
+    return !existing || b.updatedAt > existing.updatedAt;
+  });
+}
+
 /** Merge an imported list into the current one; newest `updatedAt` wins per bartender. */
 export function mergeBartenders(current: Bartender[], incoming: Bartender[]): Bartender[] {
   const byId = new Map(current.map((b) => [b.id, b]));
-  for (const b of incoming) {
-    const existing = byId.get(b.id);
-    if (!existing || b.updatedAt > existing.updatedAt) byId.set(b.id, b);
-  }
+  for (const b of newerThanCurrent(current, incoming)) byId.set(b.id, b);
   return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
